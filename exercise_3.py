@@ -1,109 +1,106 @@
 import numpy as np
 from pandas import DataFrame
 from selenium import webdriver
-from time import sleep
+import time
 import random
 from selenium.common.exceptions import NoSuchElementException, ElementNotInteractableException
 from selenium.webdriver.common.by import By
 import pandas as pd
+from undetected_chromedriver import Chrome
 
 # Category_id (shall init on configuration)
 category_ids = ['c413893']
 # Declare the number of pages to crawl (shall init on configuration)
-num_pages = 1
+num_pages = 7
+# Declare products variable to store data
+products = []
 
 # Declare browser
-driver = webdriver.Chrome('chromedriver')
+driver = Chrome()
 
 
-def extract_sectional_product_info(link):
-    # Open URL
-    driver.get(link)
-    sleep(random.randint(5, 10))
+def extract_product(item):
     # ================================Get title
-    title_elements = driver.find_elements(By.CSS_SELECTOR, ".BrowseCore [data-enzyme-id = 'productNameSpacing']")
-    titles = [elem.text for elem in title_elements]
+    title = item.find_element(By.CSS_SELECTOR, 'h2[data-name-id="ListingCardName"]')
     # ================================Get brand
-    brand_elements = driver.find_elements(By.CSS_SELECTOR, ".BrowseCore ._1vgix4w0_6101")
-    brands = [elem.text for elem in brand_elements]
+
+    brand = item.find_element(By.CSS_SELECTOR, 'p[data-name-id="ListingCardManufacturer"]')
     # ================================Get new_price, list_price
-    price_elements = driver.find_elements(By.CSS_SELECTOR, ".SFPrice")
-    prices = [elem.text.replace('From', '') for elem in price_elements]
-    new_prices = ['$' + price.split('$')[1] for price in prices]
-    list_prices = ['$' + price.split('$')[2] if len(price.split('$')) == 3 else '' for price in prices]
+    new_prices = item.find_elements(By.CSS_SELECTOR,
+                                    'span[data-test-id="StandardPricingPrice-PRIMARY"]')
+    if len(new_prices) == 0:
+        new_prices = item.find_elements(By.CSS_SELECTOR,
+                                        'span[data-test-id="StandardPricingPrice-SALE"]')
+    list_prices = item.find_elements(By.CSS_SELECTOR,
+                                     'span[data-test-id="StandardPricingPrice-PREVIOUS"] [data-name-id="PriceDisplay"]')
     # ==================================Get shipping fee
-    shipping_fee_elements = driver.find_elements(By.CSS_SELECTOR, ".BrowseCore [data-enzyme-id='shippingSpacing']")
-    shipping_fees = [elem.text.split("\n")[1]
-                     if len(elem.text.split("\n")) == 3
-                     else elem.text
-                     for elem in shipping_fee_elements]
-    # ==================================Get rating, rating_count
-    ratings, rating_counts, rating_idx = [], [], []
-    for i in range(1, len(titles) + 1):
-        try:
-            try:
-                rating = driver.find_element("xpath", "/html/body/div[3]/div/div/div/div[1]/div[2]/div[3]/main/div/div["
-                                                      "1]/div/div/div/div[{}]/div/div/div/a/div[5]/div/p".format(i))
-            except NoSuchElementException:
-                rating = driver.find_element("xpath", "/html/body/div[3]/div/div/div/div[1]/div[2]/div[2]/main/div/div["
-                                                      "1]/div/div/div/div[{}]/div/div/div/a/div[5]/div/p".format(i))
-            ratings.append(rating.text.split('stars')[0])
-            try:
-                rating_count = driver.find_element("xpath", "/html/body/div[3]/div/div/div/div[1]/div[2]/div["
-                                                            "3]/main/div/div[1]/div/div/div/div[{}]/div/div/div/a/div["
-                                                            "5]/div/div[2]".format(i))
-            except NoSuchElementException:
-                rating_count = driver.find_element("xpath", "/html/body/div[3]/div/div/div/div[1]/div[2]/div["
-                                                            "2]/main/div/div[1]/div/div/div/div[{}]/div/div/div/a/div["
-                                                            "5]/div/div[2]".format(i))
-            rating_counts.append(rating_count.text[1:-1])
-            rating_idx.append(i)
-        except NoSuchElementException:
-            print('No reviewers for ' + titles[i - 1])
-    print(ratings)
+    shipping_fees = item.find_elements(By.CSS_SELECTOR, 'span[data-enzyme-id="DeliveryPromise"]')
+    # ==================================Get rating, rating count
+    ratings = item.find_elements(By.CSS_SELECTOR, 'p[data-name-id="ListingCardReviewStars-a11yLabel"]')
+    rating = ""
+    rating_count = ""
+    if len(ratings) > 0:
+        processed_ratings = ratings[0].text[6:].split('.')
+        rating = processed_ratings[0] + "." + processed_ratings[1] \
+            if len(processed_ratings) == 3 else processed_ratings[0]
+        rating_count = processed_ratings[2].split(' ')[0] \
+            if len(processed_ratings) == 3 else processed_ratings[1].split(' ')[0]
+
     # ==================================Get sponsor
-    is_sponsors, sponsor_idx = [], []
-    for i in range(1, len(titles) + 1):
-        try:
-            try:
-                is_sponsor = driver.find_element("xpath", "/html/body/div[3]/div/div/div/div[1]/div[2]/div[3]/main"
-                                                          "/div/div[1]/div/div/div/div[{}]/div/div/div/a/div[{}]/div[1]/div"
-                                                 .format(i, 7 if i in rating_idx else 6))
-            except NoSuchElementException:
-                is_sponsor = driver.find_element("xpath", "/html/body/div[3]/div/div/div/div[1]/div[2]/div[2]/main"
-                                                          "/div/div[1]/div/div/div/div[{}]/div/div/div/a/div[{}]/div/div"
-                                                 .format(i, 7 if i in rating_idx else 6))
-            is_sponsors.append(is_sponsor.text)
-            sponsor_idx.append(i)
-        except NoSuchElementException:
-            print('No sponsor for ' + titles[i - 1])
-    print(sponsor_idx)
-    # =====================================DataFrame
-    df1 = pd.DataFrame(list(zip(titles, brands, new_prices, list_prices, shipping_fees)),
-                       columns=['title', 'brand', 'new_price', 'list_price', 'shipping_fee'])
-    df1.insert(0, "category_id", link.split('-')[-1][:-15])
-    df1['index_'] = np.arange(1, len(df1) + 1)
+    sponsored = item.find_elements(By.CSS_SELECTOR, 'div[data-testid="sponsored-tag"]')
 
-    df2 = pd.DataFrame(list(zip(rating_idx, ratings, rating_counts)),
-                       columns=['rating_idx', 'rating', 'rating_count'])
-    df3 = df1.merge(df2, how="left", left_on='index_', right_on='rating_idx')
-    df4 = pd.DataFrame(list(zip(sponsor_idx, is_sponsors)), columns=['sponsor_idx', 'is_sponsored'])
-    df5 = df3.merge(df4, how="left", left_on='index_', right_on='sponsor_idx')
-    df5 = df5[['category_id', 'title', 'brand',
-               'new_price', 'list_price', 'rating', 'rating_count', 'shipping_fee', 'is_sponsored']]
-    df5['is_sponsored'] = np.where(df5['is_sponsored'] == 'Sponsored', 'True', 'False')
-    return df5
+    product = {
+        'title': title.text,
+        'brand': brand.text,
+        'new_price': new_prices[0].text if len(new_prices) > 0 else "",
+        'list_price': list_prices[0].text if len(list_prices) > 0 else "",
+        'rating': rating,
+        'rating_count': int(rating_count) if rating_count != '' else 0,
+        'shipping_fee': "Free Shipping" if len(shipping_fees) > 0 else "",
+        'sponsored': True if len(sponsored) > 0 else False
+    }
+
+    products.append(product)
 
 
-dfs = []
+def get_items_from_url(url):
+    driver.get(url)
+    time.sleep(random.randint(5, 10))
+    item_elements = driver.find_elements(By.CSS_SELECTOR, 'div[data-test-id="Browse-Grid"] div[data-hb-id="Card"]')
+    return item_elements
 
-for category_id in category_ids:
-    for page in range(1, num_pages + 1):
-        print('Crawl Page ' + str(page))
-        df = extract_sectional_product_info(
-            'https://www.wayfair.com/furniture/sb0/sectionals-{}.html?curpage={}'.format(category_id, page)
-        )
-        dfs.append(df)
 
-result = pd.concat(dfs).head(300)
-result.to_csv('output/exercise_3.csv', index=False)
+def extract_sectional_product_info(link, category_id):
+    # Open URL
+    item_elements = get_items_from_url(link)
+    while True:
+        if len(item_elements) == 48:
+            break
+        item_elements = get_items_from_url(link)
+
+    for item in item_elements:
+        extract_product(item)
+
+    df1 = pd.DataFrame(products)
+    df1.insert(0, "category_id", category_id)
+    return df1
+
+
+def main():
+    dfs = []
+    for category_id in category_ids:
+        for page in range(1, num_pages + 1):
+            print('Crawl Page ' + str(page))
+            df = extract_sectional_product_info(
+                'https://www.wayfair.com/furniture/sb0/sectionals-{}.html?curpage={}'.format(category_id, page),
+                category_id
+            )
+            dfs.append(df)
+
+    print("-------Crawl Success!!-------")
+    result = pd.concat(dfs).head(300)
+    result.to_csv('output/exercise_3.csv', index=False)
+
+
+if __name__ == '__main__':
+    main()
