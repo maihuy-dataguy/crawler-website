@@ -1,3 +1,5 @@
 .idea
 target
 venv
+downloaded_files
+latest_logs
