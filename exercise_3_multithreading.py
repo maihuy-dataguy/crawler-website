@@ -29,6 +29,7 @@ def openMultiBrowsers(num_pages):
 
 def loadMultiBrowsers(drivers, num_pages, category_id):
     for page, driver in enumerate(drivers):
+        driver.maximize_window()
         print('Crawl Page ' + str(page + 1))
         t = threading.Thread(
             target=lambda dri, link, c_id: dfs.append(
