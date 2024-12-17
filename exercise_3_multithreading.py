@@ -33,7 +33,7 @@ def loadMultiBrowsers(drivers, num_pages, category_id):
         print('Crawl Page ' + str(page + 1))
         t = threading.Thread(
             target=lambda dri, link, c_id: dfs.append(
-                extract_sectional_product_info(driver, link, category_id)),
+                extract_sectional_product_info(dri, link, c_id)),
             args=(
                 driver,
                 'https://www.wayfair.com/furniture/sb0/sectionals-{}.html?curpage={}'.format(category_id, page + 1),
