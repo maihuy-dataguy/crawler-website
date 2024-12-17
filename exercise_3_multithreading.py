@@ -27,7 +27,7 @@ def openMultiBrowsers(num_pages):
     return drivers
 
 
-def loadMultiBrowsers(drivers, num_pages, category_id):
+def loadMultiBrowsers(drivers, category_id):
     for page, driver in enumerate(drivers):
         driver.maximize_window()
         print('Crawl Page ' + str(page + 1))
@@ -123,7 +123,7 @@ def main():
     num_pages = 7
     drivers = openMultiBrowsers(num_pages)
     for category_id in category_ids:
-        loadMultiBrowsers(drivers,num_pages,category_id)
+        loadMultiBrowsers(drivers, category_id)
 
     print("-------Crawl Success!!-------")
     result = pd.concat(dfs).head(300)
