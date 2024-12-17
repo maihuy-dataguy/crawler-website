@@ -1,3 +1,5 @@
+import threading
+
 import numpy as np
 from pandas import DataFrame
 from selenium import webdriver
@@ -7,19 +9,43 @@ from selenium.common.exceptions import NoSuchElementException, ElementNotInterac
 from selenium.webdriver.common.by import By
 import pandas as pd
 from undetected_chromedriver import Chrome
+from queue import Queue
 
 # Category_id (shall init on configuration)
 category_ids = ['c413893']
-# Declare the number of pages to crawl (shall init on configuration)
-num_pages = 7
-# Declare products variable to store data
-products = []
 
-# Declare browser
-driver = Chrome()
+threads = []
+dfs = []
 
 
-def extract_product(item):
+def openMultiBrowsers(num_pages):
+    drivers = []
+    for i in range(num_pages):
+        driver = Chrome(user_multi_procs=True)
+
+        drivers.append(driver)
+    return drivers
+
+
+def loadMultiBrowsers(drivers, num_pages, category_id):
+    for page, driver in enumerate(drivers):
+        print('Crawl Page ' + str(page + 1))
+        t = threading.Thread(
+            target=lambda dri, link, c_id: dfs.append(
+                extract_sectional_product_info(driver, link, category_id)),
+            args=(
+                driver,
+                'https://www.wayfair.com/furniture/sb0/sectionals-{}.html?curpage={}'.format(category_id, page + 1),
+                category_id,
+            ))
+        t.start()
+        threads.append(t)
+
+    for t in threads:
+        t.join()
+
+
+def extract_product(item, products):
     # ================================Get title
     title = item.find_element(By.CSS_SELECTOR, 'h2[data-name-id="ListingCardName"]')
     # ================================Get brand
@@ -63,39 +89,40 @@ def extract_product(item):
     products.append(product)
 
 
-def get_items_from_url(url):
+def get_items_from_url(driver, url):
     driver.get(url)
     time.sleep(random.randint(5, 10))
     item_elements = driver.find_elements(By.CSS_SELECTOR, 'div[data-test-id="Browse-Grid"] div[data-hb-id="Card"]')
     return item_elements
 
 
-def extract_sectional_product_info(link, category_id):
+def extract_sectional_product_info(driver, link, category_id):
+    # Declare products variable to store data
+    products = []
     # Open URL
-    item_elements = get_items_from_url(link)
+    item_elements = get_items_from_url(driver, link)
     while True:
         if len(item_elements) == 48:
             break
-        item_elements = get_items_from_url(link)
+        item_elements = get_items_from_url(driver, link)
 
     for item in item_elements:
-        extract_product(item)
+        extract_product(item, products)
 
+    print("-------Crawl page {} successfully!!-------".format(link[-1]))
+    driver.close()
     df1 = pd.DataFrame(products)
     df1.insert(0, "category_id", category_id)
+    df1.insert(0, "page", link[-1])
     return df1
 
 
 def main():
-    dfs = []
+    # Declare the number of pages to crawl (shall init on configuration)
+    num_pages = 7
+    drivers = openMultiBrowsers(num_pages)
     for category_id in category_ids:
-        for page in range(1, num_pages + 1):
-            print('Crawl Page ' + str(page))
-            df = extract_sectional_product_info(
-                'https://www.wayfair.com/furniture/sb0/sectionals-{}.html?curpage={}'.format(category_id, page),
-                category_id
-            )
-            dfs.append(df)
+        loadMultiBrowsers(drivers,num_pages,category_id)
 
     print("-------Crawl Success!!-------")
     result = pd.concat(dfs).head(300)
